@@ -1,0 +1,47 @@
+version: '3.7'
+
+services:
+  # 1. La Base de données
+  db:
+    image: postgres:13
+    container_name: mlflow_db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # 2. Le Serveur MLflow (Interface)
+  mlflow:
+    build: . 
+    container_name: mlflow_server
+    depends_on:
+      - db
+    ports:
+      - "5001:5000" # Accessible via localhost:5001
+    environment:
+      # On construit l'URL de connexion dynamiquement
+      - BACKEND_STORE_URI=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+    command: >
+      mlflow server 
+      --backend-store-uri postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+    volumes:
+      - ./artifacts:/mlflow/artifacts
+
+  # 3. Votre environnement de travail (Sklearn)
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.pipeline
+    container_name: mon_code_python
+    volumes:
+      - .:/app
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow

@@ -1,0 +1,15 @@
+# On part d'une version de Python standard
+FROM python:3.9-slim
+
+# On définit le dossier de travail dans le conteneur
+WORKDIR /app
+
+# On installe les bibliothèques scientifiques
+# C'est ICI qu'on met sklearn, pandas, et mlflow (le client)
+RUN pip install mlflow scikit-learn pandas numpy psycopg2-binary
+
+# On copie tout votre code dans le conteneur
+COPY . /app
+
+# (Optionnel) Commande par défaut si vous voulez lancer un script automatiquement
+# CMD ["python", "main.py"]
