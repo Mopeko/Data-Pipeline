@@ -24,7 +24,6 @@ services:
       - "5001:5000"
     environment:
       - BACKEND_STORE_URI=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-    # ON UTILISE LA SYNTAXE LISTE (TIRETS) POUR ÉVITER LES PROBLÈMES DE GUILLEMETS
     command:
       - mlflow
       - server
@@ -39,7 +38,7 @@ services:
     volumes:
       - ./artifacts:/mlflow/artifacts
 
-  # 3. Votre environnement de travail
+  # 3. Votre environnement de travail + API Flask
   pipeline:
     build:
       context: .
@@ -48,7 +47,8 @@ services:
     volumes:
       - .:/app
     environment:
-      # On tape bien sur le port interne 5000
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     depends_on:
       - mlflow
+    ports:
+      - "5002:5002"
