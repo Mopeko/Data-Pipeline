@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=ABeeZee&family=Cinzel:wght@400;700&family=Orbitron:wght@400;700;900&family=Barriecito&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
     <main class="page">
@@ -42,7 +42,7 @@
 
           <button type="submit" class="predict-btn" aria-label="Prédire">Prédire</button>
 
-          <label class="label">Longueur du sépale (Résultat)</label>
+          <label class="label">(Résultat)</label>
           <div class="row">
             <input class="input input-result" 
                    placeholder="En attente..." 
@@ -124,3 +124,4 @@
     </script>
   </body>
 </html>
+

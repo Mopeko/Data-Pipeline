@@ -62,7 +62,7 @@ model_columns = list(X_train.columns)
 
 @app.route('/', methods=['GET'])
 def index():
-    # Affiche la page HTML (doit être dans le dossier templates/index.html)
+    # On retire "frontend/" car le fichier est directement dans templates
     return render_template('index.html', prediction_text="")
 
 @app.route('/predict', methods=['POST'])
@@ -97,7 +97,7 @@ def predict():
         prediction = lr.predict(input_data)
         resultat = round(prediction[0], 2)
 
-        return render_template('index.html', prediction_text=f"🔮 Longueur de sépale prédite : {resultat} cm")
+        return render_template('index.html', prediction_text=f"{resultat}")
 
     except Exception as e:
         return render_template('index.html', prediction_text=f"Erreur : {str(e)}")
