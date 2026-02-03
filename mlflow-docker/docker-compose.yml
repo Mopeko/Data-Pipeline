@@ -14,26 +14,32 @@ services:
     ports:
       - "5432:5432"
 
-  # 2. Le Serveur MLflow (Interface)
+  # 2. Le Serveur MLflow
   mlflow:
     build: .
     container_name: mlflow_server
     depends_on:
       - db
     ports:
-      - "5001:5000" # Accessible via localhost:5001
+      - "5001:5000"
     environment:
-      # On construit l'URL de connexion dynamiquement
       - BACKEND_STORE_URI=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-    command: >
-      mlflow server 
-      --backend-store-uri postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-      --default-artifact-root /mlflow/artifacts
-      --host 0.0.0.0
+    # ON UTILISE LA SYNTAXE LISTE (TIRETS) POUR ÉVITER LES PROBLÈMES DE GUILLEMETS
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - --default-artifact-root
+      - /mlflow/artifacts
+      - --host
+      - 0.0.0.0
+      - --allowed-hosts
+      - "*"
     volumes:
       - ./artifacts:/mlflow/artifacts
 
-  # 3. Votre environnement de travail (Sklearn)
+  # 3. Votre environnement de travail
   pipeline:
     build:
       context: .
@@ -42,6 +48,7 @@ services:
     volumes:
       - .:/app
     environment:
+      # On tape bien sur le port interne 5000
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     depends_on:
       - mlflow

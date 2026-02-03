@@ -10,6 +10,7 @@ RUN pip install mlflow scikit-learn pandas numpy psycopg2-binary
 
 # On copie tout votre code dans le conteneur
 COPY . /app
+CMD ["tail", "-f", "/dev/null"]
 
 # (Optionnel) Commande par défaut si vous voulez lancer un script automatiquement
 # CMD ["python", "main.py"]
