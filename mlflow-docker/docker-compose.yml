@@ -13,8 +13,14 @@ services:
       - ./postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    # --- AJOUT CRUCIAL ---
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # 2. Le service de nettoyage (Nouveau)
+  # 2. Le service de nettoyage
   pretreatment:
     build:
       context: .
@@ -23,13 +29,22 @@ services:
     command: python Cleancsv.py
     volumes:
       - .:/app
+    # --- AJOUT : Accès DB pour le script ---
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+    depends_on:
+      db:
+        condition: service_healthy
 
   # 3. Le Serveur MLflow
   mlflow:
     build: .
     container_name: mlflow_server
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "5001:5000"
     environment:
@@ -48,7 +63,7 @@ services:
     volumes:
       - ./artifacts:/mlflow/artifacts
 
-  # 4. Ton API FastAPI
+  # 4. Ton API FastAPI (mon_code_python)
   pipeline:
     build:
       context: .
@@ -60,10 +75,15 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME} # --- CORRECTION : Indispensable ici ! ---
       - GIT_PYTHON_REFRESH=quiet
     depends_on:
-      - mlflow
-      - pretreatment # On attend que le nettoyage soit configuré
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+      pretreatment:
+        condition: service_completed_successfully # Attend que le CSV soit propre
     ports:
       - "5002:5002"
     command: uvicorn Trainmodel:app --host 0.0.0.0 --port 5002 --reload
