@@ -55,15 +55,6 @@ init_db()
 
 def prepare_model_and_data():
     df = pd.read_csv("iris_clean.csv", decimal=",")
-    
-    # Stockage initial sécurisé
-    try:
-        inspector = inspect(engine)
-        if not inspector.has_table('iris_cleaned_data'):
-            df.to_sql('iris_cleaned_data', engine, if_exists='replace', index=False)
-            print("✅ Dataset stocké en base.")
-    except Exception as e:
-        print(f"⚠️ Erreur stockage dataset: {e}")
 
     df_dummies = get_dummies(df, columns=["species"], drop_first=True)
     X = df_dummies.drop(columns=["sepal_length"])
