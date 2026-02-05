@@ -4,123 +4,131 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>C'est pas l'iris ? — Prototype</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=ABeeZee&family=Cinzel:wght@400;700&family=Orbitron:wght@400;700;900&family=Barriecito&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/styles.css">  </head>
-  <body>
-    <main class="page">
-      <h1 class="brand">C’est pas l’iris ?</h1>
 
-      <section class="stage">
-        <div class="image-wrap">
-          <img class="iris" src="https://www.figma.com/api/mcp/asset/de819370-e81a-4496-9c3f-46d11bbef112" alt="iris" />
-        </div>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
 
-        <form action="/predict" method="POST" class="card" role="region" aria-label="contrôles">
+<body>
+<main class="page">
+  <h1 class="brand">C’est pas l’iris ?</h1>
 
-          <label class="label">Espèce de l'iris</label>
-          <div class="select" id="speciesSelect" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false">
-            <span class="select-value">Setosa</span>
-            <img src="https://www.figma.com/api/mcp/asset/72e896e5-6e84-416e-865b-16fe20472ffe" alt="arrow" class="select-arrow" />
+  <section class="stage">
+    <div class="image-wrap">
+      <img class="iris"
+           src="https://www.figma.com/api/mcp/asset/de819370-e81a-4496-9c3f-46d11bbef112"
+           alt="iris" />
+    </div>
 
-            <input type="hidden" name="species" id="speciesHiddenInput" value="setosa">
+    <!-- FORM -->
+    <form action="/predict" method="POST" class="card" id="predictForm" role="region">
 
-            <ul class="options" role="listbox" aria-label="Espèce de l'iris">
-              <li class="option" role="option" data-value="setosa" aria-selected="true">Setosa</li>
-              <li class="option" role="option" data-value="versicolor">Versicolor</li>
-              <li class="option" role="option" data-value="virginica">Virginica</li>
-            </ul>
-          </div>
+      <!-- SPECIES -->
+      <label class="label">Espèce de l'iris</label>
+      <div class="select" id="speciesSelect" tabindex="0">
+        <span class="select-value">Setosa</span>
+        <img src="https://www.figma.com/api/mcp/asset/72e896e5-6e84-416e-865b-16fe20472ffe"
+             class="select-arrow" />
 
-          <label class="label">Largeur du sépale</label>
-          <div class="row">
-            <input type="number" step="0.1" name="sepal_width" class="input" placeholder="exemple 2.5" aria-label="largeur du sepale" required />
-            <div class="unit">cm</div>
-          </div>
+        <input type="hidden" name="species" id="speciesHiddenInput" value="setosa">
 
-          <button type="submit" class="predict-btn" aria-label="Prédire">Prédire</button>
+        <ul class="options">
+          <li class="option" data-value="setosa">Setosa</li>
+          <li class="option" data-value="versicolor">Versicolor</li>
+          <li class="option" data-value="virginica">Virginica</li>
+        </ul>
+      </div>
 
-          <label class="label">(Résultat)</label>
-          <div class="row">
-            <input class="input input-result" 
-                   placeholder="En attente..." 
-                   aria-label="longueur du sepale" 
-                   value="{{ prediction_text if prediction_text else '' }}" 
-                   readonly />
-            <div class="unit">cm</div>
-          </div>
-        </form>
-      </section>
-    </main>
+      <!-- WIDTH -->
+      <label class="label">Largeur du sépale</label>
+      <div class="row">
+        <input type="number" step="0.1" name="sepal_width"
+               class="input" placeholder="exemple 2.5" />
+        <div class="unit">cm</div>
+      </div>
 
-    <script>
-      (function(){
-        const select = document.getElementById('speciesSelect');
-        if (!select) return;
-        const valueEl = select.querySelector('.select-value');
-        const hiddenInput = document.getElementById('speciesHiddenInput');
-        const optionsEl = select.querySelector('.options');
-        const options = Array.from(select.querySelectorAll('.option'));
+      <!-- ✅ TOGGLE MODELE -->
+      <label class="label">Choix du modèle</label>
 
-        function open(){
-          select.classList.add('open');
-          select.setAttribute('aria-expanded','true');
-        }
-        function close(){
-          select.classList.remove('open');
-          select.setAttribute('aria-expanded','false');
-        }
-        function toggle(){
-          if (select.classList.contains('open')) close(); else open();
-        }
+      <div class="toggle-row">
+        <span>Modèle avec espèces</span>
 
-        select.addEventListener('click', (e)=>{
-          if (e.target.classList.contains('option')) return;
-          toggle();
-        });
+        <label class="switch">
+          <input type="checkbox" id="modelToggle">
+          <span class="slider"></span>
+        </label>
 
-        options.forEach(opt => {
-          opt.addEventListener('click', (e)=>{
-            const v = opt.dataset.value;
-            const text = opt.textContent.trim();
-            valueEl.textContent = text;
-            hiddenInput.value = v; // Met à jour l'input caché pour le serveur
-            options.forEach(o=>o.setAttribute('aria-selected','false'));
-            opt.setAttribute('aria-selected','true');
-            close();
-          });
-        });
+        <span>Modèle sans espèces</span>
+      </div>
 
-        document.addEventListener('click', (e)=>{
-          if (!select.contains(e.target)) close();
-        });
+      <!-- champ caché pour info backend -->
+      <input type="hidden" name="api_target" id="apiTarget" value="predict">
 
-        let focusedIndex = options.findIndex(o => o.getAttribute('aria-selected') === 'true');
-        select.addEventListener('keydown', (e)=>{
-          if (e.key === 'ArrowDown'){
-            e.preventDefault();
-            if (!select.classList.contains('open')) { open(); return; }
-            focusedIndex = (focusedIndex + 1) % options.length;
-            options[focusedIndex].focus();
-          } else if (e.key === 'ArrowUp'){
-            e.preventDefault();
-            if (!select.classList.contains('open')) { open(); return; }
-            focusedIndex = (focusedIndex - 1 + options.length) % options.length;
-            options[focusedIndex].focus();
-          } else if (e.key === 'Enter' || e.key === ' '){
-            e.preventDefault();
-            toggle();
-          } else if (e.key === 'Escape'){
-            close();
-          }
-        });
+      <!-- SUBMIT -->
+      <button type="submit" class="predict-btn">Prédire</button>
 
-        options.forEach(o=>{
-          o.tabIndex = -1;
-        });
-      })();
-    </script>
-  </body>
+      <!-- RESULT -->
+      <label class="label">(Résultat)</label>
+      <div class="row">
+        <input class="input input-result"
+               placeholder="En attente..."
+               value="{{ prediction_text if prediction_text else '' }}"
+               readonly />
+        <div class="unit">cm</div>
+      </div>
+
+    </form>
+  </section>
+</main>
+
+<script>
+/* =====================
+   SELECT CUSTOM
+===================== */
+(function(){
+  const select = document.getElementById('speciesSelect');
+  if (!select) return;
+
+  const valueEl = select.querySelector('.select-value');
+  const hiddenInput = document.getElementById('speciesHiddenInput');
+  const options = select.querySelectorAll('.option');
+
+  select.addEventListener('click', () => {
+    select.classList.toggle('open');
+  });
+
+  options.forEach(opt => {
+    opt.addEventListener('click', () => {
+      valueEl.textContent = opt.textContent.trim();
+      hiddenInput.value = opt.dataset.value;
+      select.classList.remove('open');
+    });
+  });
+
+  document.addEventListener('click', (e)=>{
+    if (!select.contains(e.target)) {
+      select.classList.remove('open');
+    }
+  });
+})();
+
+const toggle = document.getElementById("modelToggle");
+const form = document.getElementById("predictForm");
+const apiTarget = document.getElementById("apiTarget");
+
+toggle.addEventListener("change", () => {
+  if (toggle.checked) {
+    form.action = "/predict_alt";
+    apiTarget.value = "predict_alt";
+  } else {
+    form.action = "/predict";
+    apiTarget.value = "predict";
+  }
+});
+</script>
+
+</body>
 </html>
-

@@ -105,33 +105,6 @@ async def styles():
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "prediction_text": ""})
 
-@app.post("/predict_alt", response_class=HTMLResponse)
-async def predict(request: Request, sepal_width: float = Form(...)):
-    db = SessionLocal()
-    try:
-        # Préparation des données
-        input_data = pd.DataFrame({"sepal_width": [sepal_width]})
-        input_data = input_data.reindex(columns=model_columns, fill_value=0)
-
-        prediction = model.predict(input_data)
-        resultat = float(round(prediction[0], 2))
-
-        # --- CHANGEMENT 3 : Enregistrement dans la NOUVELLE table ---
-        new_pred = PredictionNoSpecies(
-            sepal_width=sepal_width, 
-            predicted_length=resultat
-        )
-        db.add(new_pred)
-        db.commit()
-
-        return templates.TemplateResponse("index.html", {"request": request, "prediction_text": str(resultat)})
-
-    except Exception as e:
-        db.rollback()
-        print(f"Erreur Predict: {e}")
-        return templates.TemplateResponse("index.html", {"request": request, "prediction_text": f"Erreur : {str(e)}"})
-    finally:
-        db.close()
 
 if __name__ == "__main__":
     import uvicorn
