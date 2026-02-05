@@ -1,109 +1,160 @@
+import os
 import mlflow
 import pandas as pd
+import time
 from pandas import get_dummies
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 
-df = pd.read_csv("iris_clean.csv", decimal=",")
-df = get_dummies(df, columns=["species"], drop_first=True)
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import create_engine, Column, Float, String, Integer, inspect
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
 
-X = df.drop(columns=["sepal_length"])
-y = df["sepal_length"]
+# -----------------------------
+# 1️⃣ CONFIGURATION BASE DE DONNÉES
+# -----------------------------
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+DB_NAME = os.getenv("DB_NAME", "mlflow")
+DB_HOST = "db"
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.6,random_state=42)
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
 
-# mlflow.set_tracking_uri("http://localhost:5000")
-# Enable autologging for scikit-learn
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-mlflow.set_experiment("Mlflow flowers")
-mlflow.sklearn.autolog()
+# Modèle A → table avec species
+class PredictionEntry(Base):
+    __tablename__ = "predictions"
+    id = Column(Integer, primary_key=True, index=True)
+    species = Column(String)
+    sepal_width = Column(Float)
+    predicted_length = Column(Float)
 
-# Just train the model normally
-lr = LinearRegression()
-lr.fit(X_train, y_train)
+# Modèle B → table sans species
+class PredictionNoSpecies(Base):
+    __tablename__ = "predictions_no_species"
+    id = Column(Integer, primary_key=True, index=True)
+    sepal_width = Column(Float)
+    predicted_length = Column(Float)
 
+# Init DB
+def init_db():
+    retries = 5
+    while retries > 0:
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("✅ Connexion réussie & Tables mises à jour !")
+            return True
+        except OperationalError:
+            retries -= 1
+            print(f"Waiting for database... ({retries} retries left)")
+            time.sleep(3)
+    return False
 
-print("\n--- 🧪 TEST DE PRÉDICTION ---")
+init_db()
 
-# 1. On définit la fleur à tester.
-# Le modèle a été entraîné UNIQUEMENT sur sepal_width et l'espèce.
-fleur_test = pd.DataFrame({
-    "sepal_width": [3.5],       # La seule feature numérique disponible dans ton CSV
-    
-    # Gestion des espèces (drop_first=True a supprimé 'setosa' qui est la référence)
-    # 0, 0 -> Setosa
-    # 1, 0 -> Versicolor
-    # 0, 1 -> Virginica
-    "species_versicolor": [0],  
-    "species_virginica": [0]
-})
+# -----------------------------
+# 2️⃣ LOGIQUE D'ENTRAÎNEMENT DES DEUX MODÈLES
+# -----------------------------
+def prepare_model_A():
+    df = pd.read_csv("iris_clean.csv", decimal=",")
+    df_dummies = get_dummies(df, columns=["species"], drop_first=True)
+    X = df_dummies.drop(columns=["sepal_length"])
+    y = df_dummies["sepal_length"]
 
-# 2. Sécurité : On force l'ordre des colonnes
-fleur_test = fleur_test.reindex(columns=X_train.columns, fill_value=0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.6, random_state=42)
 
-# 3. Calcul de la prédiction
-resultat = lr.predict(fleur_test)
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+    mlflow.set_experiment("Mlflow flowers")
+    mlflow.sklearn.autolog()
 
-print(f"Pour une largeur de sépale de {fleur_test['sepal_width'][0]} et l'espèce donnée :")
-print(f"🔮 Longueur de sépale prédite : {resultat[0]:.2f}")
+    lr = LinearRegression()
+    lr.fit(X_train, y_train)
+    return lr, list(X_train.columns)
 
+def prepare_model_B():
+    df = pd.read_csv("iris_clean.csv", decimal=",")
+    X = df[["sepal_width"]]  # uniquement sepal_width
+    y = df["sepal_length"]
 
-# ==========================================
-# À RAJOUTER À LA FIN DE TON FICHIER
-# ==========================================
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.6, random_state=42)
 
-from flask import Flask, render_template, request
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+    mlflow.set_experiment("Mlflow no species")
+    mlflow.sklearn.autolog()
 
-app = Flask(__name__)
+    lr = LinearRegression()
+    lr.fit(X_train, y_train)
+    return lr, list(X_train.columns)
 
-# On sauvegarde la liste des colonnes utilisées lors de l'entraînement
-# pour s'assurer que l'input du site web aura exactement le même ordre.
-model_columns = list(X_train.columns)
+model_A, columns_A = prepare_model_A()
+model_B, columns_B = prepare_model_B()
 
-@app.route('/', methods=['GET'])
-def index():
-    # Affiche la page HTML (doit être dans le dossier templates/index.html)
-    return render_template('index.html', prediction_text="")
+# -----------------------------
+# 3️⃣ FASTAPI
+# -----------------------------
+app = FastAPI(title="Iris Predictor Dual Model")
+templates = Jinja2Templates(directory="templates")
 
-@app.route('/predict', methods=['POST'])
-def predict():
+@app.get("/styles.css")
+async def styles():
+    return FileResponse("templates/styles.css")
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request, "prediction_text": ""})
+
+# Route modèle A
+@app.post("/predict", response_class=HTMLResponse)
+async def predict(request: Request, sepal_width: float = Form(...), species: str = Form(...)):
+    db = SessionLocal()
     try:
-        # 1. Récupération des données du formulaire HTML
-        # Attention : le name dans le HTML doit correspondre (sepal_width, species)
-        width = float(request.form['sepal_width'])
-        species = request.form['species']
-
-        # 2. Encodage manuel (car le modèle attend des colonnes spécifiques)
-        # Rappel : drop_first=True a été utilisé, donc :
-        # Setosa = 0, 0
-        # Versicolor = 1, 0
-        # Virginica = 0, 1
-        
         is_versicolor = 1 if species == 'versicolor' else 0
         is_virginica = 1 if species == 'virginica' else 0
 
-        # 3. Création du DataFrame pour la prédiction
         input_data = pd.DataFrame({
-            "sepal_width": [width],
+            "sepal_width": [sepal_width],
             "species_versicolor": [is_versicolor],
             "species_virginica": [is_virginica]
-        })
+        }).reindex(columns=columns_A, fill_value=0)
 
-        # 4. Sécurité : On force l'ordre des colonnes pour qu'il corresponde à X_train
-        # fill_value=0 permet de boucher les trous si jamais une colonne manque
-        input_data = input_data.reindex(columns=model_columns, fill_value=0)
+        prediction = model_A.predict(input_data)
+        resultat = float(round(prediction[0], 2))
 
-        # 5. Prédiction
-        prediction = lr.predict(input_data)
-        resultat = round(prediction[0], 2)
+        new_pred = PredictionEntry(species=species, sepal_width=sepal_width, predicted_length=resultat)
+        db.add(new_pred)
+        db.commit()
 
-        return render_template('index.html', prediction_text=f"🔮 Longueur de sépale prédite : {resultat} cm")
+        return templates.TemplateResponse("index.html", {"request": request, "prediction_text": str(resultat)})
+    finally:
+        db.close()
 
-    except Exception as e:
-        return render_template('index.html', prediction_text=f"Erreur : {str(e)}")
+# Route modèle B
+@app.post("/predict_alt", response_class=HTMLResponse)
+async def predict_alt(request: Request, sepal_width: float = Form(...)):
+    db = SessionLocal()
+    try:
+        input_data = pd.DataFrame({"sepal_width": [sepal_width]}).reindex(columns=columns_B, fill_value=0)
+        prediction = model_B.predict(input_data)
+        resultat = float(round(prediction[0], 2))
 
-# Lancement du serveur
-# On utilise host='0.0.0.0' pour que Docker laisse passer la connexion
+        new_pred = PredictionNoSpecies(sepal_width=sepal_width, predicted_length=resultat)
+        db.add(new_pred)
+        db.commit()
+
+        return templates.TemplateResponse("index.html", {"request": request, "prediction_text": str(resultat)})
+    finally:
+        db.close()
+
+# -----------------------------
+# 4️⃣ LANCEMENT UVICORN
+# -----------------------------
 if __name__ == "__main__":
-    print("Code d'entraînement terminé. Lancement du serveur web...")
-    app.run(debug=True, host='0.0.0.0', port=5002)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5002, reload=True)
